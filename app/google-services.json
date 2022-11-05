@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "485188533518",
+    "project_id": "cr7wallpaper-a9c72",
+    "storage_bucket": "cr7wallpaper-a9c72.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:485188533518:android:8fe675b23238a5d97bab5f",
+        "android_client_info": {
+          "package_name": "com.app.cr7wallpaper"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "485188533518-d3u2gnfonrgd78up01v1b0etmqleu4kn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBK7f-nqrHhfGcHzeHMovPA57_SPp3skfU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "485188533518-d3u2gnfonrgd78up01v1b0etmqleu4kn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

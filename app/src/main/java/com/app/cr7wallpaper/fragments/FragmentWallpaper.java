@@ -1,0 +1,408 @@
+package com.app.cr7wallpaper.fragments;
+
+import static com.solodroid.ads.sdk.util.Constant.APPLOVIN;
+import static com.solodroid.ads.sdk.util.Constant.MOPUB;
+import static com.solodroid.ads.sdk.util.Constant.UNITY;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.StaggeredGridLayoutManager;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
+
+import com.app.cr7wallpaper.Config;
+import com.app.cr7wallpaper.R;
+import com.app.cr7wallpaper.activities.ActivityWallpaperDetail;
+import com.app.cr7wallpaper.activities.MainActivity;
+import com.app.cr7wallpaper.adapters.AdapterWallpaper;
+import com.app.cr7wallpaper.callbacks.CallbackWallpaper;
+import com.app.cr7wallpaper.databases.prefs.AdsPref;
+import com.app.cr7wallpaper.databases.prefs.SharedPref;
+import com.app.cr7wallpaper.databases.sqlite.DBHelper;
+import com.app.cr7wallpaper.models.Wallpaper;
+import com.app.cr7wallpaper.rests.ApiInterface;
+import com.app.cr7wallpaper.rests.RestAdapter;
+import com.app.cr7wallpaper.utils.AdsManager;
+import com.app.cr7wallpaper.utils.Constant;
+import com.app.cr7wallpaper.utils.Tools;
+import com.facebook.shimmer.ShimmerFrameLayout;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class FragmentWallpaper extends Fragment {
+
+    private static final String ARG_ORDER = "order";
+    private static final String ARG_FILTER = "filter";
+    View root_view;
+    private RecyclerView recyclerView;
+    private AdapterWallpaper adapterWallpaper;
+    private SwipeRefreshLayout swipeRefreshLayout;
+    private ShimmerFrameLayout lyt_shimmer;
+    private Call<CallbackWallpaper> callbackCall = null;
+    private int post_total = 0;
+    private int failed_page = 0;
+    private SharedPref sharedPref;
+    private AdsPref adsPref;
+    List<Wallpaper> items = new ArrayList<>();
+    String order, filter;
+    DBHelper dbHelper;
+    AdsManager adsManager;
+
+    public FragmentWallpaper() {
+        // Required empty public constructor
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        order = getArguments() != null ? getArguments().getString(ARG_ORDER) : "";
+        filter = getArguments() != null ? getArguments().getString(ARG_FILTER) : "";
+    }
+
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        // Inflate the layout for this fragment
+        root_view = inflater.inflate(R.layout.fragment_wallpaper, container, false);
+        setHasOptionsMenu(true);
+
+        dbHelper = new DBHelper(getActivity());
+        sharedPref = new SharedPref(getActivity());
+        adsPref = new AdsPref(getActivity());
+        adsManager = new AdsManager(getActivity());
+
+        swipeRefreshLayout = root_view.findViewById(R.id.swipe_refresh_layout);
+        swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
+        lyt_shimmer = root_view.findViewById(R.id.shimmer_view_container);
+        initShimmerLayout();
+
+        recyclerView = root_view.findViewById(R.id.recyclerView);
+        //ItemOffsetDecoration itemDecoration = new ItemOffsetDecoration(getActivity(), R.dimen.grid_space_wallpaper);
+        //recyclerView.addItemDecoration(itemDecoration);
+        recyclerView.setLayoutManager(new StaggeredGridLayoutManager(sharedPref.getWallpaperColumns(), StaggeredGridLayoutManager.VERTICAL));
+        recyclerView.setHasFixedSize(true);
+
+        //set data and list adapter
+        adapterWallpaper = new AdapterWallpaper(getActivity(), recyclerView, items);
+        recyclerView.setAdapter(adapterWallpaper);
+
+        // on item list clicked
+        adapterWallpaper.setOnItemClickListener((v, obj, position) -> {
+            Intent intent = new Intent(getActivity(), ActivityWallpaperDetail.class);
+            intent.putExtra(Constant.POSITION, position);
+            Bundle bundle = new Bundle();
+            bundle.putSerializable(Constant.ARRAY_LIST, (Serializable) items);
+            intent.putExtra(Constant.BUNDLE, bundle);
+            intent.putExtra(Constant.EXTRA_OBJC, obj);
+            startActivity(intent);
+
+            ((MainActivity) getActivity()).showInterstitialAd();
+        });
+
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView v, int state) {
+                super.onScrollStateChanged(v, state);
+            }
+        });
+
+        // detect when scroll reach bottom
+        adapterWallpaper.setOnLoadMoreListener(current_page -> {
+            if (adsPref.getNativeAdWallpaperList() != 0) {
+                setLoadMoreNativeAd(current_page);
+            } else {
+                setLoadMore(current_page);
+            }
+        });
+
+        // on swipe list
+        swipeRefreshLayout.setOnRefreshListener(() -> {
+            if (callbackCall != null && callbackCall.isExecuted()) callbackCall.cancel();
+            adapterWallpaper.resetListData();
+            if (Tools.isConnect(getActivity())) {
+                dbHelper.deleteAll(DBHelper.TABLE_RECENT);
+            }
+            requestAction(1);
+        });
+
+        requestAction(1);
+
+        return root_view;
+    }
+
+    public void setLoadMoreNativeAd(int current_page) {
+        Log.d("page", "currentPage: " + current_page);
+        // Assuming final total items equal to real post items plus the ad
+        int totalItemBeforeAds = (adapterWallpaper.getItemCount() - current_page);
+        if (post_total > totalItemBeforeAds && current_page != 0) {
+            int next_page = current_page + 1;
+            requestAction(next_page);
+        } else {
+            adapterWallpaper.setLoaded();
+        }
+    }
+
+    public void setLoadMore(int current_page) {
+        if (post_total > adapterWallpaper.getItemCount() && current_page != 0) {
+            int next_page = current_page + 1;
+            requestAction(next_page);
+        } else {
+            adapterWallpaper.setLoaded();
+        }
+    }
+
+    public static FragmentWallpaper newInstance(String order, String filter) {
+        FragmentWallpaper fragment = new FragmentWallpaper();
+        Bundle args = new Bundle();
+        args.putString(ARG_ORDER, order);
+        args.putString(ARG_FILTER, filter);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
+        super.onSaveInstanceState(savedInstanceState);
+    }
+
+    private void displayApiResult(final List<Wallpaper> wallpapers) {
+        insertData(wallpapers);
+        swipeProgress(false);
+        if (wallpapers.size() == 0) {
+            showNoItemView(true);
+        }
+    }
+
+    private void requestListPostApi(final int page_no) {
+        ApiInterface apiInterface = RestAdapter.createAPI();
+
+        if (sharedPref.getWallpaperColumns() == 3) {
+            callbackCall = apiInterface.getWallpapers(page_no, Constant.LOAD_MORE_3_COLUMNS, filter, order);
+        } else {
+            callbackCall = apiInterface.getWallpapers(page_no, Constant.LOAD_MORE_2_COLUMNS, filter, order);
+        }
+
+        callbackCall.enqueue(new Callback<CallbackWallpaper>() {
+            @Override
+            public void onResponse(Call<CallbackWallpaper> call, Response<CallbackWallpaper> response) {
+                CallbackWallpaper resp = response.body();
+                if (resp != null && resp.status.equals("ok")) {
+                    post_total = resp.count_total;
+                    //Log.d("Results : ", ARG_ORDER + " " + post_total);
+                    displayApiResult(resp.posts);
+                    switch (order) {
+                        case Constant.ORDER_RECENT:
+                            if (page_no == 1)
+                                dbHelper.truncateTableWallpaper(DBHelper.TABLE_RECENT);
+                            dbHelper.addListWallpaper(resp.posts, DBHelper.TABLE_RECENT);
+                            break;
+                        case Constant.ORDER_FEATURED:
+                            if (page_no == 1)
+                                dbHelper.truncateTableWallpaper(DBHelper.TABLE_FEATURED);
+                            dbHelper.addListWallpaper(resp.posts, DBHelper.TABLE_FEATURED);
+                            break;
+                        case Constant.ORDER_POPULAR:
+                            if (page_no == 1)
+                                dbHelper.truncateTableWallpaper(DBHelper.TABLE_POPULAR);
+                            dbHelper.addListWallpaper(resp.posts, DBHelper.TABLE_POPULAR);
+                            break;
+                        case Constant.ORDER_RANDOM:
+                            if (page_no == 1)
+                                dbHelper.truncateTableWallpaper(DBHelper.TABLE_RANDOM);
+                            dbHelper.addListWallpaper(resp.posts, DBHelper.TABLE_RANDOM);
+                            break;
+                        case Constant.ORDER_LIVE:
+                            if (page_no == 1)
+                                dbHelper.truncateTableWallpaper(DBHelper.TABLE_GIF);
+                            dbHelper.addListWallpaper(resp.posts, DBHelper.TABLE_GIF);
+                            break;
+                    }
+                } else {
+                    onFailRequest(page_no);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<CallbackWallpaper> call, Throwable t) {
+                swipeProgress(false);
+                loadDataFromDatabase(call, page_no);
+            }
+        });
+    }
+
+    private void loadDataFromDatabase(Call<CallbackWallpaper> call, final int page_no) {
+        switch (order) {
+            case Constant.ORDER_RECENT: {
+                List<Wallpaper> wallpapers = dbHelper.getAllWallpaper(DBHelper.TABLE_RECENT);
+                insertData(wallpapers);
+                if (wallpapers.size() == 0) {
+                    if (!call.isCanceled()) onFailRequest(page_no);
+                }
+                break;
+            }
+            case Constant.ORDER_FEATURED: {
+                List<Wallpaper> wallpapers = dbHelper.getAllWallpaper(DBHelper.TABLE_FEATURED);
+                insertData(wallpapers);
+                if (wallpapers.size() == 0) {
+                    if (!call.isCanceled()) onFailRequest(page_no);
+                }
+                break;
+            }
+            case Constant.ORDER_POPULAR: {
+                List<Wallpaper> wallpapers = dbHelper.getAllWallpaper(DBHelper.TABLE_POPULAR);
+                insertData(wallpapers);
+                if (wallpapers.size() == 0) {
+                    if (!call.isCanceled()) onFailRequest(page_no);
+                }
+                break;
+            }
+            case Constant.ORDER_RANDOM: {
+                List<Wallpaper> wallpapers = dbHelper.getAllWallpaper(DBHelper.TABLE_RANDOM);
+                insertData(wallpapers);
+                if (wallpapers.size() == 0) {
+                    if (!call.isCanceled()) onFailRequest(page_no);
+                }
+                break;
+            }
+            case Constant.ORDER_LIVE: {
+                List<Wallpaper> wallpapers = dbHelper.getAllWallpaper(DBHelper.TABLE_GIF);
+                insertData(wallpapers);
+                if (wallpapers.size() == 0) {
+                    if (!call.isCanceled()) onFailRequest(page_no);
+                }
+                break;
+            }
+        }
+    }
+
+    private void insertData(List<Wallpaper> wallpapers) {
+        if (adsPref.getNativeAdWallpaperList() != 0) {
+            switch (adsPref.getAdType()) {
+                case UNITY:
+                case APPLOVIN:
+                case MOPUB:
+                    adapterWallpaper.insertData(wallpapers);
+                    break;
+                default:
+                    adapterWallpaper.insertDataWithNativeAd(wallpapers);
+                    break;
+            }
+        } else {
+            adapterWallpaper.insertData(wallpapers);
+        }
+    }
+
+    private void onFailRequest(int page_no) {
+        failed_page = page_no;
+        adapterWallpaper.setLoaded();
+        swipeProgress(false);
+        if (Tools.isConnect(getActivity())) {
+            showFailedView(true, getString(R.string.failed_text));
+        } else {
+            showFailedView(true, getString(R.string.failed_text));
+        }
+    }
+
+    public void requestAction(final int page_no) {
+        showFailedView(false, "");
+        showNoItemView(false);
+        if (page_no == 1) {
+            swipeProgress(true);
+        } else {
+            adapterWallpaper.setLoading();
+        }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> requestListPostApi(page_no), Constant.DELAY_TIME);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        swipeProgress(false);
+        if (callbackCall != null && callbackCall.isExecuted()) {
+            callbackCall.cancel();
+        }
+        lyt_shimmer.stopShimmer();
+    }
+
+    private void showFailedView(boolean show, String message) {
+        View lyt_failed = root_view.findViewById(R.id.lyt_failed);
+        ((TextView) root_view.findViewById(R.id.failed_message)).setText(message);
+        if (show) {
+            recyclerView.setVisibility(View.GONE);
+            lyt_failed.setVisibility(View.VISIBLE);
+        } else {
+            recyclerView.setVisibility(View.VISIBLE);
+            lyt_failed.setVisibility(View.GONE);
+        }
+        root_view.findViewById(R.id.failed_retry).setOnClickListener(view -> requestAction(failed_page));
+    }
+
+    private void showNoItemView(boolean show) {
+        View lyt_no_item = root_view.findViewById(R.id.lyt_no_item);
+        ((TextView) root_view.findViewById(R.id.no_item_message)).setText(R.string.msg_no_item);
+        if (show) {
+            recyclerView.setVisibility(View.GONE);
+            lyt_no_item.setVisibility(View.VISIBLE);
+        } else {
+            recyclerView.setVisibility(View.VISIBLE);
+            lyt_no_item.setVisibility(View.GONE);
+        }
+    }
+
+    private void swipeProgress(final boolean show) {
+        if (!show) {
+            swipeRefreshLayout.setRefreshing(show);
+            lyt_shimmer.setVisibility(View.GONE);
+            lyt_shimmer.stopShimmer();
+            return;
+        }
+        swipeRefreshLayout.post(() -> {
+            swipeRefreshLayout.setRefreshing(show);
+            lyt_shimmer.setVisibility(View.VISIBLE);
+            lyt_shimmer.startShimmer();
+        });
+    }
+
+    public void initShimmerLayout() {
+        View view_shimmer_2_columns = root_view.findViewById(R.id.view_shimmer_2_columns);
+        View view_shimmer_3_columns = root_view.findViewById(R.id.view_shimmer_3_columns);
+        View view_shimmer_2_columns_square = root_view.findViewById(R.id.view_shimmer_2_columns_square);
+        View view_shimmer_3_columns_square = root_view.findViewById(R.id.view_shimmer_3_columns_square);
+
+        if (Config.DISPLAY_WALLPAPER == 1) {
+            if (sharedPref.getWallpaperColumns() == 3) {
+                view_shimmer_3_columns.setVisibility(View.VISIBLE);
+            } else {
+                view_shimmer_2_columns.setVisibility(View.VISIBLE);
+            }
+        } else {
+            if (sharedPref.getWallpaperColumns() == 3) {
+                view_shimmer_3_columns_square.setVisibility(View.VISIBLE);
+            } else {
+                view_shimmer_2_columns_square.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+    }
+
+}

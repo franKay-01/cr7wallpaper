@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.app.cr7wallpaper">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER_HINTS" />
+
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <uses-feature
+        android:name="android.software.live_wallpaper"
+        android:required="true" />
+
+    <application
+        android:name="com.app.cr7wallpaper.activities.MyApplication"
+        android:allowBackup="true"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:requestLegacyExternalStorage="true"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
+
+        <meta-data
+            android:name="applovin.sdk.key"
+            android:value="@string/applovin_sdk_key" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivitySplash"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivityCategoryDetails"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivityWallpaperDetail"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivityCropWallpaper"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivitySearch"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivitySettings"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivityNotificationDetail"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <activity
+            android:exported="true"
+            android:name="com.app.cr7wallpaper.activities.ActivityWebView"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
+
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+        <activity
+            android:name="com.google.android.gms.ads.AdActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize" />
+
+        <service
+            android:name="com.app.cr7wallpaper.services.SetGIFAsWallpaperService"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:showOnLockScreen="true">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/gif_wallpaper" />
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <meta-data
+            android:name="com.onesignal.NotificationServiceExtension"
+            android:value="com.app.cr7wallpaper.notifications.NotificationServiceExtension" />
+
+        <meta-data
+            android:name="com.onesignal.NotificationOpened.DEFAULT"
+            android:value="DISABLE" />
+
+    </application>
+
+</manifest>
